@@ -111,21 +111,12 @@ exports.handler = (event, context, callback) => {
                     }
                 }
                 
-                if (+currentCount === +maxCount){
-                  const response = {
-                    status: '200',
-                    body: JSON.stringify({ message: "Your download limit has been achieved!" })
-                  };
-
-                  console.log("Your download limit has been achieved!");
-                  callback(null, response);
-                  return;
-                }else{
+                if (+currentCount < +maxCount){
                   const userAttributes = [{
                       Name: 'custom:current_count',
                       Value: String(+currentCount+1)
-                    }
-                  ];
+                  }];
+                  
                   const params = {
                       UserPoolId: userPoolId,
                       Username: username,
@@ -142,11 +133,18 @@ exports.handler = (event, context, callback) => {
                         return;
                       }
                   });
+                }else{
+                  const response = {
+                    status: '200',
+                    body: JSON.stringify({ message: "Your download limit has been achieved!" })
+                  };
+
+                  console.log("Your download limit has been achieved!");
+                  callback(null, response);
+                  return;
                 }
               }
             });
-            
-            // callback(null, { statusCode: 200, body: JSON.stringify(decoded) });
           }
         });
         
