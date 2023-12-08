@@ -76,6 +76,7 @@ data "archive_file" "s3_download_checker" {
 }
 
 resource "aws_lambda_function" "s3_download_checker" {
+  depends_on    = [null_resource.modify_lambda_edge]
   provider      = aws.us-east-1
   filename      = data.archive_file.s3_download_checker.output_path
   function_name = "s3_download_checker"
