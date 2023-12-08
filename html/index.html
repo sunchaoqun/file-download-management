@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>File Download</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .form-container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        .form-group input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        .form-group button {
+            width: 100%;
+            padding: 10px;
+            border: none;
+            background-color: #007bff;
+            color: white;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .form-group button:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <div id="auth-form-div" class="form-container">
+        <form id="auth-form">
+            <div class="form-group">
+                <label for="key">Key</label>
+                <input type="text" id="key" name="key" value="" required>
+            </div>
+            <div class="form-group">
+                <label for="code">Code</label>
+                <input type="text" id="code" name="code" pattern="\d{6}" maxlength="6" title="Code must be 6 digits" required>
+            </div>
+            <div class="form-group">
+                <button type="submit">Auth</button>
+            </div>
+        </form>
+    </div>
+    <div id="download-list" class="form-container" style="display: none;">
+        <h2>Download File</h2>
+        <ul>
+            <li><a id="download-file" href=""></a></li>
+        </ul>
+        <div class="form-group">
+            <button id="logoutButton" type="button">Logout</button>
+        </div>
+    </div>
+    <script>
+        function getFileNameFromUrl(url) {
+            // 使用 URL 对象（如果可能）来处理 URL
+            const urlObject = new URL(url);
+
+            // 获取 pathname 部分，例如 "/path/to/file.txt"
+            const pathname = urlObject.pathname;
+
+            // 分割路径并获取最后一部分作为文件名
+            const fileName = pathname.split('/').pop();
+
+            return fileName;
+        }
+
+        function getCookie(name) {
+            // 将 cookie 字符串分割为键值对数组
+            var cookieArray = document.cookie.split(';');
+
+            // 遍历数组，寻找指定的 cookie
+            for(var i = 0; i < cookieArray.length; i++) {
+                var cookiePair = cookieArray[i].split('=');
+
+                // 删除 cookie 名称前的空格，并比较名称
+                if (name == cookiePair[0].trim()) {
+                    // 解码并返回 cookie 的值
+                    return decodeURIComponent(cookiePair[1]);
+                }
+            }
+
+            // 如果未找到指定的 cookie，则返回空值
+            return null;
+        }
+
+        function parseJwt(token) {
+            const base64Url = token.split('.')[1];
+            const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+            const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+                return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+            }).join(''));
+
+            return JSON.parse(jsonPayload);
+        }
+
+        window.onload = function() {
+            // 读取名为 'IdToken' 的 cookie
+            var idToken = getCookie('IdToken');
+            console.log('Value of the cookie "IdToken":', idToken);
+
+            if (idToken) {                
+                const jwt = idToken;
+                // 解码 JWT
+                const decodedJwt = parseJwt(jwt);
+                console.log(decodedJwt);
+
+                const fileName = getFileNameFromUrl(decodedJwt["custom:generated_uri"]);
+                const downloadLink = document.getElementById('download-file');
+                downloadLink.href = decodedJwt["custom:generated_uri"];       // 设置文件的下载链接
+                downloadLink.textContent = fileName; // 设置链接文本为文件名
+
+                document.getElementById("auth-form-div").style.display = 'none';
+                document.getElementById("download-list").style.display = 'block';
+            } else {
+                document.getElementById("auth-form-div").style.display = 'block';
+                document.getElementById("download-list").style.display = 'none';
+            }
+        };
+
+        document.getElementById('logoutButton').addEventListener('click', function() {
+            var cookies = document.cookie.split(";");
+
+            for (var i = 0; i < cookies.length; i++) {
+                var cookie = cookies[i];
+                var eqPos = cookie.indexOf("=");
+                var name = eqPos > -1 ? cookie.substr(0, eqPos) : cookie;
+                document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; domain=.d3a3g7xlucisx6.cloudfront.net;";
+            }
+
+            window.location.href = 'index.html'; // 替换为您的登录页面 URL
+        });
+
+        document.getElementById('auth-form-div').addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            var key = document.getElementById('key').value;
+            var code = document.getElementById('code').value;
+
+            // 使用 fetch API 发送异步请求并包含 cookies
+            fetch('VERIFY_URL', { // 替换 '/submit-form-url' 为你的服务端接收地址
+                method: 'POST',
+                mode: 'cors',
+                credentials: 'include', // 包含 cookies
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ key: key, code: code.toString() })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log('Success:', data);
+
+                if (data.statusCode == 200) {
+                    document.cookie = data.body.cookie;
+                    var idToken = getCookie('IdToken');
+
+                    const fileName = getFileNameFromUrl(data.body.file_url);
+                    const downloadLink = document.getElementById('download-file');
+                    downloadLink.href = data.body.file_url;       // 设置文件的下载链接
+                    downloadLink.textContent = fileName; // 设置链接文本为文件名
+
+                    // 根据返回的数据处理后续逻辑
+                    if (idToken) {
+                        document.getElementById("auth-form-div").style.display = 'none';
+                        document.getElementById("download-list").style.display = 'block';
+                    } else {
+                        alert("Invalid key or code.");
+                    }
+                }else{
+                    alert(data.body);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+            });
+        });
+    </script>
+</body>
+</html>
+
