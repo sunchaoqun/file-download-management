@@ -1,7 +1,7 @@
 variable "region" {}
 variable "file_download_bucket_name" {}
 variable "global_salt" {}
-variable "file_download_management_pool_name" {}
+variable "cognito_user_pool_name" {}
 
 provider "aws" {
   region = var.region # 您可以更改为您的区域
@@ -758,7 +758,7 @@ resource "aws_cognito_user_pool" "file_download_management_pool" {
     ]
   }
 
-  name = var.file_download_management_pool_name
+  name = var.cognito_user_pool_name
   # 添加自定义属性
   schema {
     name     = "compress_code"
