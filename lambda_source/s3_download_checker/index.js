@@ -94,54 +94,56 @@ exports.handler = (event, context, callback) => {
             };
         
             cognitoIdp.adminGetUser(params, function(err, userData) {
-                if (err) {
-                    console.log(err, err.stack);
-                    callback(err);
-                } else {
-                  console.log(userData);
-                  let currentCount = '0';
-                  let maxCount = '0';
-                  
-                  for (let attr of userData.UserAttributes) {
-                      if (attr.Name === 'custom:current_count') {
-                          currentCount = attr.Value;
-                      }
-                      if (attr.Name === 'custom:max_download_count') {
-                          maxCount = attr.Value;
-                      }
-                  }
-                  
-                  if (+currentCount == +maxCount-1){
-                    const response = {
-                      status: '200',
-                      body: JSON.stringify({ message: "Your download limit has been achieved!" })
-                    };
-                    callback(null, response);
-                    return;
-                  }else{
-                    const userAttributes = [{
-                        Name: 'custom:current_count',
-                        Value: String(+currentCount+1)
-                      }
-                    ];
-                    const params = {
-                        UserPoolId: userPoolId,
-                        Username: username,
-                        UserAttributes: userAttributes
-                    };
+              if (err) {
+                  console.log(err, err.stack);
+                  callback(err);
+              } else {
+                console.log(userData);
+                let currentCount = '0';
+                let maxCount = '0';
                 
-                    cognitoIdp.adminUpdateUserAttributes(params, function(err, data) {
-                        if (err) {
-                            console.log(err, err.stack);
-                            callback(err);
-                        } else {
-                          console.log(data);
-                          callback(null, request);
-                          return;
-                        }
-                    });
-                  }
+                for (let attr of userData.UserAttributes) {
+                    if (attr.Name === 'custom:current_count') {
+                        currentCount = attr.Value;
+                    }
+                    if (attr.Name === 'custom:max_download_count') {
+                        maxCount = attr.Value;
+                    }
                 }
+                
+                if (+currentCount === +maxCount){
+                  const response = {
+                    status: '200',
+                    body: JSON.stringify({ message: "Your download limit has been achieved!" })
+                  };
+
+                  console.log("Your download limit has been achieved!");
+                  callback(null, response);
+                  return;
+                }else{
+                  const userAttributes = [{
+                      Name: 'custom:current_count',
+                      Value: String(+currentCount+1)
+                    }
+                  ];
+                  const params = {
+                      UserPoolId: userPoolId,
+                      Username: username,
+                      UserAttributes: userAttributes
+                  };
+              
+                  cognitoIdp.adminUpdateUserAttributes(params, function(err, data) {
+                      if (err) {
+                          console.log(err, err.stack);
+                          callback(err);
+                      } else {
+                        console.log(data);
+                        callback(null, request);
+                        return;
+                      }
+                  });
+                }
+              }
             });
             
             // callback(null, { statusCode: 200, body: JSON.stringify(decoded) });
@@ -151,10 +153,10 @@ exports.handler = (event, context, callback) => {
         console.log(cookieValue);
       
         if (!cookieValue) {
-            return {
-                statusCode: 404,
-                body: JSON.stringify({ message: `Cookie ${cookieKey} not found` })
-            };
+          return {
+              statusCode: 404,
+              body: JSON.stringify({ message: `Cookie ${cookieKey} not found` })
+          };
         }
       
         // 返回找到的 Cookie 值
