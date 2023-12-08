@@ -107,6 +107,7 @@ resource "aws_cloudfront_origin_access_identity" "oai" {
 }
 
 resource "aws_s3_object" "index_html" {
+  depends_on   = [null_resource.modify_html]
   bucket       = aws_s3_bucket.file_download_bucket.bucket
   key          = "index.html"
   source       = "${path.module}/index.html"
