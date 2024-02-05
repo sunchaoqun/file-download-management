@@ -164,9 +164,6 @@
                 method: 'POST',
                 mode: 'cors',
                 credentials: 'include', // 包含 cookies
-                headers: {
-                    'Content-Type': 'application/json'
-                },
                 body: JSON.stringify({ key: key, code: code.toString() })
             })
             .then(response => {
@@ -179,12 +176,12 @@
                 console.log('Success:', data);
 
                 if (data.statusCode == 200) {
-                    document.cookie = data.body.cookie;
+                    document.cookie = data.cookie;
                     var idToken = getCookie('IdToken');
 
-                    const fileName = getFileNameFromUrl(data.body.file_url);
+                    const fileName = getFileNameFromUrl(data.file_url);
                     const downloadLink = document.getElementById('download-file');
-                    downloadLink.href = data.body.file_url;       // 设置文件的下载链接
+                    downloadLink.href = data.file_url;       // 设置文件的下载链接
                     downloadLink.textContent = fileName; // 设置链接文本为文件名
 
                     // 根据返回的数据处理后续逻辑
@@ -195,10 +192,11 @@
                         alert("Invalid key or code.");
                     }
                 }else{
-                    alert(data.body);
+                    alert(data.error);
                 }
             })
             .catch(error => {
+                alert(error);
                 console.error('Error:', error);
             });
         });

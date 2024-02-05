@@ -2,15 +2,26 @@ import json
 import boto3
 import random
 import os
+import base64
 import http.cookies as Cookie
 
 def lambda_handler(event, context):
     
     print(event)
     SALT = os.getenv('SALT')
+
+    body = event.get('body', '')
+
+    # 解码请求体（如果是base64编码）
+    if event.get('isBase64Encoded', False):
+        body = base64.b64decode(body)
+    else:
+        body = body.encode('utf-8')  # 确保body是字节串
     
+    body = json.loads(body)
+
     # 处理请求数据
-    key = event['key']
+    key = body['key']
     
     # 创建 Cognito 客户端
     client = boto3.client('cognito-idp')
@@ -20,7 +31,7 @@ def lambda_handler(event, context):
     client_id = os.getenv('CLIENT_ID')
     cloudfront_domain_name = os.getenv('CLOUDFRONT_DOMAIN_NAME')
 
-    random_code = str(event['code'])
+    random_code = str(body['code'])
     
     # 用户信息
     username = key + "_" + random_code
@@ -113,43 +124,77 @@ def lambda_handler(event, context):
                                     # 'Set-Cookie': set_cookie_headers[1],
                                     'Content-Type': 'application/json',
                                     'Access-Control-Allow-Origin': 'https://' + cloudfront_domain_name,
-                                    'Access-Control-Allow-Credentials': 'true',
-                                    'Access-Control-Expose-Headers': 'date, etag',
+                                    'Access-Control-Allow-Methods': 'POST,OPTIONS',
+                                    'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,Set-Cookie',
+                                    'Access-Control-Allow-Credentials': 'true'
                                 },
                                 'multiValueHeaders': {
                                     'Set-Cookie': set_cookie_headers
                                 },
-                                'body': {
+                                'body': json.dumps({
+                                    'statusCode': 200,
                                     "file_url": generated_uri,
                                     "cookie": set_cookie_headers[0]
-                                    
-                                }
+                                })
                             } 
                         else:
                             return {
-                                'statusCode': 401,
+                                'statusCode': 200,
+                                'headers': {
+                                    'Access-Control-Allow-Origin': 'https://' + cloudfront_domain_name,
+                                    'Access-Control-Allow-Methods': 'POST,OPTIONS',
+                                    'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token',
+                                    'Access-Control-Allow-Credentials': 'true'
+                                },
                                 'body': json.dumps({'error': 'This Code has already been used'})
                             }    
                     else:
                         return {
-                            'statusCode': 401,
+                            # 401 
+                            'statusCode': 200,
+                            'headers': {
+                                'Access-Control-Allow-Origin': 'https://' + cloudfront_domain_name,
+                                'Access-Control-Allow-Methods': 'POST,OPTIONS',
+                                'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token',
+                                'Access-Control-Allow-Credentials': 'true'
+                            },
                             'body': json.dumps({'error': 'The Key or Code is incorrect'})
                         }
             except client.exceptions.ClientError as error:
                 return {
-                    'statusCode': 500,
+                    # 500
+                    'statusCode': 200,
+                    'headers': {
+                        'Access-Control-Allow-Origin': 'https://' + cloudfront_domain_name,
+                        'Access-Control-Allow-Methods': 'POST,OPTIONS',
+                        'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token',
+                        'Access-Control-Allow-Credentials': 'true'
+                    },
                     'body': json.dumps({'error': str(error)})
                 }
     except client.exceptions.NotAuthorizedException:
         # 登录失败
         return {
-            'statusCode': 401,
+            # 401
+            'statusCode': 200,
+            'headers': {
+                'Access-Control-Allow-Origin': 'https://' + cloudfront_domain_name,
+                'Access-Control-Allow-Methods': 'POST,OPTIONS',
+                'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token',
+                'Access-Control-Allow-Credentials': 'true'
+            },
             'body': json.dumps({'error': 'The Key or Code is incorrect'})
         }
     except Exception as e:
         # 其他错误处理
-        raise
         return {
-            'statusCode': 500,
+            # 500
+            'statusCode': 200, 
+            'headers': {
+                'Access-Control-Allow-Origin': 'https://' + cloudfront_domain_name,
+                'Access-Control-Allow-Methods': 'POST,OPTIONS',
+                'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token',
+                'Access-Control-Allow-Credentials': 'true'
+            },
             'body': json.dumps({'error': str(e)})
         }

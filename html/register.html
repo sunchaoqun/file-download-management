@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register Public Key</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        textarea {
+            resize: none;
+        }
+        .form-container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group-button {
+            margin-bottom: 15px;
+            display: flex;
+            justify-content: space-between;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        .form-group input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        .form-group-button :first-child {
+            margin-right: 10px; /* 只给第一个按钮右侧增加 10px 的间距 */
+            background-color: #ff8800;
+        }
+        .form-group-button :first-child:hover {
+            background-color: #c56b04;
+        }
+        .form-group-button button {
+            width: 100%;
+            padding: 10px;
+            border: none;
+            background-color: #007bff;
+            color: white;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .form-group-button button:hover {
+            background-color: #0056b3;
+        }
+        .form-group-button .button-disabled {
+            background-color: #cccccc !important;
+            color: #666666;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <div id="auth-form-div" class="form-container">
+        <form id="auth-form">
+            <div class="form-group">
+                <label for="key">Key</label>
+                <input type="text" id="key" name="key" value="" required>
+            </div>
+            <div class="form-group">
+                <label for="public_key">Public Key</label>
+                <textarea id="public_key" name="public_key" rows="10" cols="63" required>-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAxtoBw5sJM/PAKTeExCtW
+HgWSSSuno7FUBZ6A6XPgY/iMnPT7GESP4kix+97MVsykDwTadI/vY+MEAFIt2w5x
+i/BM24g1JC33sjh/DSSsG2hZ+Tm3vTrVT1KzTTqd8bCPn2JnDAZJ1z3JaHxQtzcf
+2HN/HcmvQfnzbz7lLmXyhWaW++lkc+p0PnoeCsMeTEGetA6pSqJX339phSMo3Ez+
+bVbfZiuh1D0ywnER1gu6w/N8qWcVobjzJbjK8ZIynxA7HgkmZddVZ6W7Fjy4qOfg
+P7eunVmo8S6Egh84lHMVNVmrXdM3T7z49V0kjWB8TAnx1UCHnaa5fHWzFNIE5Mvi
+ywIDAQAB
+-----END PUBLIC KEY-----</textarea>
+            </div>
+            <div class="form-group">
+                <label for="code">Code</label>
+                <input type="text" id="code" name="code" pattern="\d{6}" maxlength="6" title="Code must be 6 digits" required>
+            </div>
+            <div class="form-group-button">
+                <button id="sendCode" type="button" onclick="startTimer()">Send Code</button>
+                <button id="regist" type="submit">Regist</button>
+            </div>
+        </form>
+    </div>
+    <div id="download-list" class="form-container" style="display: none;">
+        <h2>Regist Successfully</h2>
+        <ul>
+            <li>You can use your key to handle download files</li>
+        </ul>
+        <!-- <div class="form-group">
+            <button id="logoutButton" type="button">Logout</button>
+        </div> -->
+    </div>
+    <script>
+        var regist = document.getElementById("regist");
+        
+        window.onload = function() {
+            regist.classList.add("button-disabled");
+            regist.disabled = true; // 禁用按钮
+        };
+
+        function startTimer() {
+            var button = document.getElementById("sendCode");
+            var timerText = document.getElementById("sendCode");
+            var timeLeft = 120; // 2分钟倒计时
+
+            button.classList.add("button-disabled");
+            button.disabled = true; // 禁用按钮
+
+            var interval = setInterval(function() {
+                timerText.innerHTML = "Send Code(" + timeLeft + " s)";
+                timeLeft--;
+
+                if (timeLeft < 0) {
+                    clearInterval(interval);
+                    button.classList.remove("button-disabled");
+                    button.disabled = false; // 重新激活按钮
+                    timerText.innerHTML = "Send Code";
+                }
+            }, 1000);
+
+            var key = document.getElementById('key').value;
+            var public_key = document.getElementById('public_key').value;
+
+            // 使用 fetch API 发送异步请求并包含 cookies
+            fetch('PUBLIC_KEY_SIGNUP_URL', { // 替换 '/submit-form-url' 为你的服务端接收地址
+                method: 'POST',
+                mode: 'cors',
+                credentials: 'include', // 包含 cookies
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ key: key, public_key: public_key.toString(), step: 'code' })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log('Success:', data);
+
+                if (data.statusCode == 200) {
+                    document.cookie = data.body.cookie;
+                    var STEP = getCookie('STEP');
+                    regist.classList.remove("button-disabled");
+                    regist.disabled = false; // 重新激活按钮
+                }else{
+                    alert(data.body);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+            });
+
+        }
+
+        function getCookie(name) {
+            // 将 cookie 字符串分割为键值对数组
+            var cookieArray = document.cookie.split(';');
+
+            // 遍历数组，寻找指定的 cookie
+            for(var i = 0; i < cookieArray.length; i++) {
+                var cookiePair = cookieArray[i].split('=');
+
+                // 删除 cookie 名称前的空格，并比较名称
+                if (name == cookiePair[0].trim()) {
+                    // 解码并返回 cookie 的值
+                    return decodeURIComponent(cookiePair[1]);
+                }
+            }
+
+            // 如果未找到指定的 cookie，则返回空值
+            return null;
+        }
+
+        function parseJwt(token) {
+            const base64Url = token.split('.')[1];
+            const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+            const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+                return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+            }).join(''));
+
+            return JSON.parse(jsonPayload);
+        }
+    
+        document.getElementById('auth-form-div').addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            var key = document.getElementById('key').value;
+            var code = document.getElementById('code').value;
+            var public_key = document.getElementById('public_key').value;
+
+            // 使用 fetch API 发送异步请求并包含 cookies
+            fetch('PUBLIC_KEY_SIGNUP_URL', { // 替换 '/submit-form-url' 为你的服务端接收地址
+                method: 'POST',
+                mode: 'cors',
+                credentials: 'include', // 包含 cookies
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ key: key, code: code.toString(), public_key: public_key.toString(), step: 'regist' })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log('Success:', data);
+
+                if (data.statusCode == 200) {
+                    document.cookie = data.body.cookie;
+                    var STEP = getCookie('STEP');
+
+                    // 根据返回的数据处理后续逻辑
+                    if (STEP) {
+                        document.getElementById("auth-form-div").style.display = 'none';
+                        document.getElementById("download-list").style.display = 'block';
+                    } else {
+                        alert("Invalid key or code.");
+                    }
+                }else{
+                    alert(data.body);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+            });
+
+        });
+
+    </script>
+</body>
+</html>
