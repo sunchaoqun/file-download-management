@@ -17,7 +17,7 @@ import urllib.parse
 # from cryptography.hazmat.backends import default_backend
 # from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 # from cryptography.hazmat.primitives import padding
-from Crypto.Cipher import AES
+# from Crypto.Cipher import AES
 # import email
 # from email.parser import BytesParser
 # from email import policy
@@ -87,6 +87,7 @@ def lambda_handler(event, context):
 
     key = ''
     max_download_count = ''
+    max_login_times = ''
     ttl = ''
     enable_compress_with_code = False
     enable_encrypt = False
@@ -124,6 +125,8 @@ def lambda_handler(event, context):
                 key = part.content.decode('utf-8')
             if b'name="max_download_count"' in content_disposition:
                 max_download_count = int(part.content.decode('utf-8'))
+            if b'name="max_login_times"' in content_disposition:
+                max_login_times = int(part.content.decode('utf-8'))
             if b'name="ttl"' in content_disposition:
                 ttl = int(part.content.decode('utf-8'))
             if b'name="compress"' in content_disposition:
@@ -172,6 +175,7 @@ def lambda_handler(event, context):
 
         key = body['key']
         max_download_count = body['max_download_count']
+        max_login_times = body['max_login_times']
         ttl = body['ttl']
         region = body['region']
         s3_bucket = body['s3_bucket']
@@ -361,6 +365,10 @@ def lambda_handler(event, context):
             'Value': str(max_download_count)
         },
         {
+            'Name': 'custom:max_login_times',
+            'Value': str(max_login_times)
+        },
+        {
             'Name': 'custom:current_count',
             'Value': '0'
         },
@@ -529,27 +537,27 @@ def validateEmail(email):
     else:
         return False
 
-def pkcs7padding(data):
-    bs = AES.block_size
-    padding = bs - len(data) % bs
-    padding_text = chr(padding) * padding
-    return data + padding_text.encode()
+# def pkcs7padding(data):
+#     bs = AES.block_size
+#     padding = bs - len(data) % bs
+#     padding_text = chr(padding) * padding
+#     return data + padding_text.encode()
  
-class AesCrypter(object):
+# class AesCrypter(object):
  
-    def __init__(self, key):
-        self.key = key
+#     def __init__(self, key):
+#         self.key = key
  
-    def encrypt(self, data):
-        """
-        AES 加密， 加密模式ECB，填充：pkcs7padding，密钥长度：256
-        :param data:
-        :return:
-        """
-        data = pkcs7padding(data)
-        cipher = AES.new(self.key, AES.MODE_ECB)
-        encrypted = cipher.encrypt(data)
-        return encrypted
+#     def encrypt(self, data):
+#         """
+#         AES 加密， 加密模式ECB，填充：pkcs7padding，密钥长度：256
+#         :param data:
+#         :return:
+#         """
+#         data = pkcs7padding(data)
+#         cipher = AES.new(self.key, AES.MODE_ECB)
+#         encrypted = cipher.encrypt(data)
+#         return encrypted
 
 def all_chunks_uploaded(filename, total_chunks):
     # 构建期望的所有片段的S3键列表

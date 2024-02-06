@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generate</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        form {
+            width: 300px;
+            margin-bottom: 20px;
+        }
+        input[type="text"], input[type="number"], input[type="file"] {
+            width: 100%;
+            padding: 8px;
+            margin: 10px 0;
+            box-sizing: border-box;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        input[type="submit"] {
+            width: 100%;
+            background-color: #4CAF50;
+            color: white;
+            padding: 14px 20px;
+            margin: 8px 0;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .button-disabled {
+            background-color: #cccccc !important;
+            color: #666666;
+            cursor: not-allowed;
+        }
+        input[type="submit"]:hover {
+            background-color: #45a049;
+        }
+        .label {
+            font-weight: bold;
+        }
+        .result {
+            white-space: pre-wrap; /* Keeps the format of JSON */
+        }
+        .hidden {
+            display: none;
+        }
+        .progress-container {
+            width: 100%;
+            background-color: #ddd;
+            border-radius: 5px;
+            overflow: hidden;
+            margin-top: 20px;
+        }
+        .progress-bar {
+            height: 20px;
+            background-color: #4caf50;
+            width: 0%;
+            border-radius: 5px;
+            transition: width 0.4s ease;
+        }
+    </style>
+</head>
+<body>
+    <form id="dataForm">
+        <div class="label">Key:</div>
+        <input type="text" name="key" id="key" placeholder="Key" value="+6583079697" required><br>
+        <div class="label">Max Login Times:</div>
+        <input type="number" name="max_login_times" id="max_login_times" placeholder="Max Login Times" value="1" required><br>
+        <div class="label">Max Download Count:</div>
+        <input type="number" name="max_download_count" id="max_download_count" placeholder="Max Download Count" value="2" required><br>
+        <div class="label">TTL:</div>
+        <input type="number" name="ttl" id="ttl" placeholder="TTL" value="3600" required><br>
+        <input type="checkbox" name="use_s3" id="use_s3" checked> Use S3<br>
+
+        <div id="use_s3_div">
+            <div class="label">Region:</div>
+            <input type="text" name="region" id="region" placeholder="S3 Region" value="ap-southeast-1" required><br>
+            <div class="label">S3 Bucket:</div>
+            <input type="text" name="s3_bucket" id="s3_bucket" placeholder="S3 Bucket" value="billysun-sg" required><br>
+            <div class="label">S3 Key:</div>
+            <input type="text" name="s3_key" id="s3_key" placeholder="S3 Key" value="aws.jpg" required><br>
+            <div class="label">Generated URI:</div>
+            <input type="text" name="generated_uri" id="generated_uri" placeholder="Generated URI" value=""><br>
+        </div>
+
+        <input type="checkbox" name="compress" id="compress" checked> Compress<br>
+        <input type="checkbox" name="encrypt" id="encrypt"> Encrypt<br>
+        <div id="encryptKeyDiv" class="hidden">
+            <div class="label">Encrypt Key:</div>
+            <input type="text" name="encrypt_key" id="encrypt_key" placeholder="Encrypt Key" value="billysun@amazon.com">
+        </div>
+        <div id="fileDiv" class="hidden">
+            <input type="file" name="fileToUpload" id="fileToUpload"><br>
+        </div>
+        <input type="submit" id="generateButton" value="Generate">
+    </form>
+
+    <div class="progress-container hidden" id="progressContainer">
+        <div class="progress-bar" id="progressBar"></div>
+    </div>
+
+    <div class="progress-info" id="progressInfo"></div>
+
+    <div id="result" class="result"></div>
+
+    <script>
+
+        let uploadedChunks = 0;
+        const chunkSize = 1000 * 1024;
+        const parallelUploadCount = 2;
+
+        document.getElementById('compress').addEventListener('change', function() {
+            document.getElementById('encrypt').disabled = !this.checked;
+            if (!this.checked) {
+                document.getElementById('encrypt').checked = false;
+                document.getElementById('encryptKeyDiv').classList.add('hidden');
+            }
+        });
+
+        document.getElementById('use_s3').addEventListener('change', function() {
+            if (this.checked) {
+                document.getElementById('use_s3_div').classList.remove('hidden');
+                document.getElementById('fileDiv').classList.add('hidden');
+            } else {
+                document.getElementById('use_s3_div').classList.add('hidden');
+                document.getElementById('fileDiv').classList.remove('hidden');
+            }
+        });
+
+        document.getElementById('encrypt').addEventListener('change', function() {
+            if (this.checked) {
+                document.getElementById('encryptKeyDiv').classList.remove('hidden');
+            } else {
+                document.getElementById('encryptKeyDiv').classList.add('hidden');
+            }
+        });
+
+         async function uploadChunk(chunk, filename, chunkIndex, totalChunks, totalSize) {
+            const formData = new FormData();
+
+            formData.append('fileChunk', chunk);
+            formData.append('filename', filename);
+            formData.append('chunkIndex', chunkIndex);
+            formData.append('totalChunks', totalChunks);
+
+            formData.append('key', document.getElementById('key').value);
+            formData.append('max_download_count', document.getElementById('max_download_count').value);
+            formData.append('max_login_times', document.getElementById('max_login_times').value);
+            formData.append('ttl', document.getElementById('ttl').value);
+            // formData.append('region', document.getElementById('region').value);
+            // formData.append('s3_bucket', document.getElementById('s3_bucket').value);
+            // formData.append('s3_key', document.getElementById('s3_key').value);
+            formData.append('generated_uri', document.getElementById('generated_uri').value);
+            formData.append('compress', document.getElementById('compress').checked);
+            formData.append('encrypt', document.getElementById('encrypt').checked);
+            formData.append('encrypt_key', document.getElementById('encrypt_key').value);
+            
+            // if (!document.getElementById('encrypt').checked) {
+            //     formData.delete('encrypt_key');
+            // }
+
+            return fetch('GENERATE_ALB_URL', { // 替换为您的后端URL
+                method: 'POST',
+                mode: 'cors',
+                credentials: 'include', // 包含 cookies
+                body: formData
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(data => {
+                let uploadedSize = 0;
+                let uploadedSizeMB = 0;
+                let totalSizeMB = totalSize / (1024 * 1024);
+
+                uploadedChunks++;
+
+                console.log("uploadedChunks "+ uploadedChunks + " totalChunks " + totalChunks);
+
+                if(uploadedChunks == totalChunks) {
+                    document.getElementById('result').innerText = JSON.stringify(data, null, 2);
+                    generateButton.disabled = false; // 禁用按钮
+                    generateButton.classList.remove('button-disabled');
+                    uploadedSize = totalSize;
+                    uploadedSizeMB = totalSizeMB;
+                } else {
+                    uploadedSize = uploadedChunks * chunkSize;
+                    uploadedSizeMB = uploadedSize / chunkSize;
+                }
+
+                console.log("uploaded "+ uploadedSize + " total " + totalSize);
+
+                let percent = (uploadedChunks / totalChunks) * 100;
+
+                progressBar.style.width = percent + '%';
+
+                let progressPercent = (uploadedSize / totalSize) * 100;
+
+                progressInfo.textContent = `已上传: ${uploadedSizeMB.toFixed(2)}MB / 总共: ${totalSizeMB.toFixed(2)}MB (${progressPercent.toFixed(2)}%)`;
+                
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                document.getElementById('result').innerText = 'Error: ' + error.message;
+            });
+        }
+
+        document.getElementById('dataForm').addEventListener('submit', async function(e) {
+
+            use_s3 = document.getElementById('use_s3').checked;
+
+            e.preventDefault();
+
+            const generateButton = document.getElementById('generateButton');
+            const progressContainer = document.getElementById('progressContainer');
+            const progressBar = document.getElementById('progressBar');
+
+            generateButton.disabled = true; // 禁用按钮
+            generateButton.classList.add('button-disabled');
+            progressContainer.classList.remove('hidden'); // 显示进度条
+            uploadedChunks = 0;
+            progressBar.style.width = '0%'; // 重置进度条
+
+            if(use_s3){
+
+                fetch('GENERATE_API_GATEWAY_URL', { // 替换为您的后端URL
+                    method: 'POST',
+                    mode: 'cors',
+                    credentials: 'include', // 包含 cookies
+                    body: JSON.stringify({
+                        key: document.getElementById('key').value, 
+                        max_download_count: document.getElementById('max_download_count').value,
+                        max_login_times: document.getElementById('max_login_times').value,
+                        ttl: document.getElementById('ttl').value,
+                        region: document.getElementById('region').value,
+                        s3_bucket: document.getElementById('s3_bucket').value,
+                        s3_key: document.getElementById('s3_key').value,
+                        generated_uri: document.getElementById('generated_uri').value,
+                        compress: document.getElementById('compress').checked,
+                        encrypt: document.getElementById('encrypt').checked,
+                        encrypt_key: document.getElementById('encrypt_key').value
+                    })
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+
+                    const generateButton = document.getElementById('generateButton');
+
+                    generateButton.disabled = false; // 禁用按钮
+                    generateButton.classList.remove('button-disabled');
+
+                    return response.json();
+                })
+                .then(data => {
+                    document.getElementById('result').innerText = JSON.stringify(data, null, 2);
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    document.getElementById('result').innerText = 'Error: ' + error.message;
+                });
+            } 
+            else {
+			    const fileInput = document.getElementById('fileToUpload');
+                const file = fileInput.files[0];
+			    const totalChunks = Math.ceil(file.size / chunkSize);
+                const totalSize = file.size;
+
+                for (let index = 0; index < totalChunks; index += parallelUploadCount) {
+                    const promises = [];
+
+                    for (let j = 0; j < parallelUploadCount && index + j < totalChunks; j++) {
+                        const chunkStart = (index + j) * chunkSize;
+                        const chunkEnd = Math.min(file.size, chunkStart + chunkSize);
+                        const chunk = file.slice(chunkStart, chunkEnd);
+
+                        promises.push(uploadChunk(chunk, file.name, index + j, totalChunks, totalSize));
+                    }
+
+                    try {
+                        const responses = await Promise.all(promises);
+                        responses.forEach(response => console.log('Chunk uploaded', response));
+                    } catch (error) {
+                        console.error('Error uploading chunk:', error);
+                        break; // 如果有任何错误，停止进一步上传
+                    }
+                }
+            }
+        });
+    </script>
+</body>
+</html>

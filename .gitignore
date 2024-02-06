@@ -1,1 +1,9 @@
 *.zip
+.terraform.lock.hcl
+.terraform
+index.html
+register.html
+terraform.tfstate
+terraform.tfstate.backup
+generate.html
+lambda_source/s3_download_checker/index.js

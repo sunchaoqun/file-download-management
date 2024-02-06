@@ -404,10 +404,19 @@ resource "aws_iam_policy" "public_key_registration_api_signup_lambda_policy" {
       {
           "Effect": "Allow",
           "Action": [
-              "cognito-idp:AdminGetUser"
+              "cognito-idp:AdminGetUser",
+              "cognito-idp:AdminCreateUser",
+              "cognito-idp:AdminUpdateUserAttributes"
           ],
           "Resource": [
               "arn:aws:cognito-idp:${var.region}:${data.aws_caller_identity.current.account_id}:userpool/${aws_cognito_user_pool.public_key_registration_pool.id}"
+          ]
+      },    
+      {
+          "Effect": "Allow",
+          "Action": "cognito-idp:ListUsers",
+          "Resource": [
+            "arn:aws:cognito-idp:${var.region}:${data.aws_caller_identity.current.account_id}:userpool/${aws_cognito_user_pool.public_key_registration_pool.id}"
           ]
       },
     ]
@@ -871,6 +880,17 @@ resource "aws_lambda_permission" "cognito_invoke_lambda_pre_auth" {
   source_arn = "arn:aws:cognito-idp:${var.region}:${data.aws_caller_identity.current.account_id}:userpool/${aws_cognito_user_pool.file_download_management_pool.id}"
 }
 
+resource "null_resource" "modify_generate_html" {
+  provisioner "local-exec" {
+    command = "bash modify_generate.sh ${aws_api_gateway_deployment.s3_download_management_api_deployment.invoke_url} http://${aws_lb.generate_alb.dns_name}"
+  }
+
+  # 触发器可以是任何会在您需要重新执行脚本时发生变化的值
+  triggers = {
+    always_run = "${timestamp()}"
+  }
+}
+
 resource "null_resource" "modify_index_html" {
   provisioner "local-exec" {
     command = "bash modify_index.sh ${aws_api_gateway_deployment.s3_download_management_api_deployment.invoke_url}"
@@ -1060,17 +1080,6 @@ resource "aws_cognito_user_pool" "file_download_management_pool" {
   }
 
   schema {
-    name     = "current_count"
-    attribute_data_type = "Number"
-    mutable  = true
-    required = false
-    number_attribute_constraints {
-      min_value = "0"
-      max_value = "10000"
-    }
-  }
-
-  schema {
     name     = "enable"
     attribute_data_type = "String"
     mutable  = true
@@ -1099,8 +1108,8 @@ resource "aws_cognito_user_pool" "file_download_management_pool" {
   }
 
   schema {
-    name     = "max_dl_count"
     attribute_data_type = "String"
+    name     = "max_login_times"
     mutable  = true
     required = false
   }
@@ -1110,6 +1119,17 @@ resource "aws_cognito_user_pool" "file_download_management_pool" {
     name                = "max_download_count"
     mutable             = true
     required            = false
+  }
+
+  schema {
+    name     = "current_count"
+    attribute_data_type = "Number"
+    mutable  = true
+    required = false
+    number_attribute_constraints {
+      min_value = "0"
+      max_value = "10000"
+    }
   }
 
   schema {
@@ -1202,6 +1222,17 @@ resource "aws_cognito_user_pool" "public_key_registration_pool" {
     required = false
   }
 
+  schema {
+    name     = "reset_pubkey_times"
+    attribute_data_type = "Number"
+    mutable  = true
+    required = false
+    number_attribute_constraints {
+      min_value = "0"
+      max_value = "1000"
+    }
+  }
+
   auto_verified_attributes = ["email"]
 
   email_verification_message = "您的验证码是 {####}。"
@@ -1265,7 +1296,6 @@ resource "aws_lb" "generate_alb" {
 # 创建目标组
 resource "aws_lb_target_group" "generate_alb_tg" {
   name     = "generate-alb-tg"
-  port     = 80
   protocol = "HTTP"
   vpc_id   = var.generate_alb_vpc_id
 

@@ -55,6 +55,8 @@ def lambda_handler(event, context):
         cookie = ''
         generated_uri = ''
         login_count = ''
+        max_login_times = ''
+        un = ''
         
         if not IdToken:
             print(">>>")
@@ -63,94 +65,98 @@ def lambda_handler(event, context):
                 response = client.get_user(
                     AccessToken=AccessToken
                 )
-            
                 print(response)
-                
+
                 for attr in response['UserAttributes']:
-                    
-                    if attr['Name'] == "sub":
+                    if "sub" == attr["Name"]:
                         un = attr['Value']
-                        response = client.admin_get_user(
-                            UserPoolId=user_pool_id,
-                            Username=username
-                        )
-                        print(response)
-                        
-                        for attr in response['UserAttributes']:
-                            if attr['Name'] == "custom:ttl":
-                                ttl = attr['Value']
-                            if attr['Name'] == "custom:generated_uri":
-                                generated_uri = attr['Value']
-                            if attr['Name'] == "custom:login_count":
-                                login_count = attr['Value']
+                        break
+                
+                if un == '':
+                    return {
+                        # 401 
+                        'statusCode': 200,
+                        'headers': {
+                            'Access-Control-Allow-Origin': 'https://' + cloudfront_domain_name,
+                            'Access-Control-Allow-Methods': 'POST,OPTIONS',
+                            'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token',
+                            'Access-Control-Allow-Credentials': 'true'
+                        },
+                        'body': json.dumps({'error': 'The Key or Code is incorrect'})
+                    }
+                else:
+                    response = client.admin_get_user(
+                        UserPoolId=user_pool_id,
+                        Username=username
+                    )
+
+                    print(response)
+
+                    for attr in response['UserAttributes']:
+                        if attr['Name'] == "custom:ttl":
+                            ttl = attr['Value']
+                        if attr['Name'] == "custom:generated_uri":
+                            generated_uri = attr['Value']
+                        if attr['Name'] == "custom:login_count":
+                            login_count = attr['Value']
+                        if attr['Name'] == "custom:max_login_times":
+                            max_login_times = attr['Value']
+
+                    if int(login_count) <= int(max_login_times):
+                        # ttl = '3600'
                                 
-                        if login_count == '1':
-                            # ttl = '3600'
-                                    
-                            # 创建一个 Cookie
-                            jwt_cookie = Cookie.SimpleCookie()
-                            jwt_cookie['IdToken'] = IdToken
-                            jwt_cookie['IdToken']['domain'] = '.' + cloudfront_domain_name
-                            jwt_cookie['IdToken']['path'] = '/'
-                            jwt_cookie['IdToken']['secure'] = True
-                            jwt_cookie['IdToken']['HttpOnly'] = False
-                            jwt_cookie['IdToken']['Max-Age'] = ttl
-                            
+                        # 创建一个 Cookie
+                        jwt_cookie = Cookie.SimpleCookie()
+                        jwt_cookie['IdToken'] = IdToken
+                        jwt_cookie['IdToken']['domain'] = '.' + cloudfront_domain_name
+                        jwt_cookie['IdToken']['path'] = '/'
+                        jwt_cookie['IdToken']['secure'] = True
+                        jwt_cookie['IdToken']['HttpOnly'] = False
+                        jwt_cookie['IdToken']['Max-Age'] = ttl
                         
-                            # # 创建另一个 Cookie
-                            # another_cookie = Cookie.SimpleCookie()
-                            # another_cookie['isLogin'] = False
-                            # another_cookie['isLogin']['domain'] = '.' + cloudfront_domain_name
-                            # another_cookie['isLogin']['path'] = '/'
-                            # another_cookie['isLogin']['secure'] = True
-                            # another_cookie['isLogin']['HttpOnly'] = True
-                            # another_cookie['isLogin']['Max-Age'] = ttl
+                    
+                        # # 创建另一个 Cookie
+                        # another_cookie = Cookie.SimpleCookie()
+                        # another_cookie['isLogin'] = False
+                        # another_cookie['isLogin']['domain'] = '.' + cloudfront_domain_name
+                        # another_cookie['isLogin']['path'] = '/'
+                        # another_cookie['isLogin']['secure'] = True
+                        # another_cookie['isLogin']['HttpOnly'] = True
+                        # another_cookie['isLogin']['Max-Age'] = ttl
+                    
+                        # 生成 Set-Cookie 头部
+                        set_cookie_headers = [
+                            jwt_cookie.output(header='').strip(),
+                            # another_cookie.output(header='').strip()
+                        ]
+                            
+                        # Domain=d3a3g7xlucisx6.cloudfront.net;
+                        # cookie = 'IdToken=' + IdToken + '; Path=/; Max-Age=' + ttl + '; SameSite=None; Secure;'
                         
-                            # 生成 Set-Cookie 头部
-                            set_cookie_headers = [
-                                jwt_cookie.output(header='').strip(),
-                                # another_cookie.output(header='').strip()
-                            ]
-                                
-                            # Domain=d3a3g7xlucisx6.cloudfront.net;
-                            # cookie = 'IdToken=' + IdToken + '; Path=/; Max-Age=' + ttl + '; SameSite=None; Secure;'
-                            
-                            # cookieLax = 'IdToken=' + IdToken + '; Path=/;  Max-Age=' + ttl + '; SameSite=Lax;'
-                            
-                            return {
+                        # cookieLax = 'IdToken=' + IdToken + '; Path=/;  Max-Age=' + ttl + '; SameSite=Lax;'
+                        
+                        return {
+                            'statusCode': 200,
+                            'headers': {
+                                'Set-Cookie': set_cookie_headers[0],
+                                # 'Set-Cookie': set_cookie_headers[1],
+                                'Content-Type': 'application/json',
+                                'Access-Control-Allow-Origin': 'https://' + cloudfront_domain_name,
+                                'Access-Control-Allow-Methods': 'POST,OPTIONS',
+                                'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,Set-Cookie',
+                                'Access-Control-Allow-Credentials': 'true'
+                            },
+                            'multiValueHeaders': {
+                                'Set-Cookie': set_cookie_headers
+                            },
+                            'body': json.dumps({
                                 'statusCode': 200,
-                                'headers': {
-                                    'Set-Cookie': set_cookie_headers[0],
-                                    # 'Set-Cookie': set_cookie_headers[1],
-                                    'Content-Type': 'application/json',
-                                    'Access-Control-Allow-Origin': 'https://' + cloudfront_domain_name,
-                                    'Access-Control-Allow-Methods': 'POST,OPTIONS',
-                                    'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,Set-Cookie',
-                                    'Access-Control-Allow-Credentials': 'true'
-                                },
-                                'multiValueHeaders': {
-                                    'Set-Cookie': set_cookie_headers
-                                },
-                                'body': json.dumps({
-                                    'statusCode': 200,
-                                    "file_url": generated_uri,
-                                    "cookie": set_cookie_headers[0]
-                                })
-                            } 
-                        else:
-                            return {
-                                'statusCode': 200,
-                                'headers': {
-                                    'Access-Control-Allow-Origin': 'https://' + cloudfront_domain_name,
-                                    'Access-Control-Allow-Methods': 'POST,OPTIONS',
-                                    'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token',
-                                    'Access-Control-Allow-Credentials': 'true'
-                                },
-                                'body': json.dumps({'error': 'This Code has already been used'})
-                            }    
+                                "file_url": generated_uri,
+                                "cookie": set_cookie_headers[0]
+                            })
+                        } 
                     else:
                         return {
-                            # 401 
                             'statusCode': 200,
                             'headers': {
                                 'Access-Control-Allow-Origin': 'https://' + cloudfront_domain_name,
@@ -158,7 +164,7 @@ def lambda_handler(event, context):
                                 'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token',
                                 'Access-Control-Allow-Credentials': 'true'
                             },
-                            'body': json.dumps({'error': 'The Key or Code is incorrect'})
+                            'body': json.dumps({'error': 'This Code has already been used or achieved the limit'})
                         }
             except client.exceptions.ClientError as error:
                 return {

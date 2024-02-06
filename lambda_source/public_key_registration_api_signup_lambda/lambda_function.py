@@ -4,6 +4,9 @@ import random
 import os
 import http.cookies as Cookie
 
+# 创建 Cognito 客户端
+client = boto3.client('cognito-idp')
+
 def lambda_handler(event, context):
     
     print(event)
@@ -13,9 +16,6 @@ def lambda_handler(event, context):
     key = event['key']
     public_key = event['public_key']
     step = event['step']
-    
-    # 创建 Cognito 客户端
-    client = boto3.client('cognito-idp')
 
     # 用户池信息
     user_pool_id = os.getenv('USER_POOL_ID')
@@ -51,7 +51,12 @@ def lambda_handler(event, context):
         {
             'Name': 'custom:public_key3',
             'Value': public_key3
+        },
+        {
+            'Name': 'custom:reset_pubkey_times',
+            'Value': '0'
         }
+
     ]
 
     try:
@@ -71,11 +76,47 @@ def lambda_handler(event, context):
         ]
 
         if step == "regist" and len(event['code']) == 6:
-            response = client.confirm_sign_up(
-                ClientId=client_id,
-                Username=username,
-                ConfirmationCode=event['code']
-            )
+
+            if resetPublicKey(username, user_pool_id, False):
+                response = client.confirm_forgot_password(
+                    ClientId=client_id,
+                    Username=username,
+                    ConfirmationCode=event['code'],
+                    Password=password
+                )
+
+                if response.get('ResponseMetadata', {}).get('HTTPStatusCode') == 200:
+                    try:
+                        response = client.admin_update_user_attributes(
+                            UserPoolId=user_pool_id,
+                            Username=username,
+                            UserAttributes=[
+                                {
+                                    'Name': 'custom:public_key1',
+                                    'Value': public_key1
+                                },
+                                {
+                                    'Name': 'custom:public_key2',
+                                    'Value': public_key2
+                                },
+                                {
+                                    'Name': 'custom:public_key3',
+                                    'Value': public_key3
+                                }
+                            ]
+                        )
+                        print("User attributes updated successfully.")
+                    except client.exceptions.UserNotFoundException:
+                        print("User not found.")
+                    except Exception as e:
+                        print(e)
+
+            else:
+                response = client.confirm_sign_up(
+                    ClientId=client_id,
+                    Username=username,
+                    ConfirmationCode=event['code']
+                )
 
             print(response)
 
@@ -88,42 +129,49 @@ def lambda_handler(event, context):
                 }
             }
         else:
-            
-            # 注册用户
-            response = client.sign_up(
-                ClientId=client_id,
-                Username=username,
-                Password=password,
-                UserAttributes=user_attributes
-            )
+            if resetPublicKey(username, user_pool_id, True):
+
+                # 步骤2: 重新发送确认邮件
+                try:
+                    response = client.forgot_password(
+                        ClientId=client_id,
+                        Username=username
+                    )
+                    print("Forgot password email sent successfully.")
+                except client.exceptions.UserNotFoundException:
+                    print("User not found.")
+                except Exception as e:
+                    print(e)
+                
+            else:
+                # 注册用户
+                response = client.sign_up(
+                    ClientId=client_id,
+                    Username=username,
+                    Password=password,
+                    UserAttributes=user_attributes
+                )
             
             print(response)
 
-            if response["UserConfirmed"] == False:
+            jwt_cookie['STEP'] = "C"
 
-                jwt_cookie['STEP'] = "C"
-
-                return {
-                    'statusCode': 200,
-                    'headers': {
-                        'Set-Cookie': set_cookie_headers[0],
-                        'Content-Type': 'application/json',
-                        'Access-Control-Allow-Origin': 'https://' + cloudfront_domain_name,
-                        'Access-Control-Allow-Credentials': 'true',
-                        'Access-Control-Expose-Headers': 'date, etag',
-                    },
-                    'multiValueHeaders': {
-                        'Set-Cookie': set_cookie_headers
-                    },
-                    'body': {
-                        "cookie": set_cookie_headers[0]
-                    }
+            return {
+                'statusCode': 200,
+                'headers': {
+                    'Set-Cookie': set_cookie_headers[0],
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': 'https://' + cloudfront_domain_name,
+                    'Access-Control-Allow-Credentials': 'true',
+                    'Access-Control-Expose-Headers': 'date, etag',
+                },
+                'multiValueHeaders': {
+                    'Set-Cookie': set_cookie_headers
+                },
+                'body': {
+                    "cookie": set_cookie_headers[0]
                 }
-            else:
-                return {
-                    'statusCode': 401,
-                    'body': json.dumps({'error': 'Public key obtain code error'})
-                }
+            }
             
     except client.exceptions.NotAuthorizedException:
         # 登录失败
@@ -143,3 +191,55 @@ def lambda_handler(event, context):
             'statusCode': 500,
             'body': json.dumps({'error': str(e)})
         }
+
+def resetPublicKey(username, user_pool_id, counter): 
+    filter_expression = 'username = "' + username + '"'
+            
+    print(filter_expression)
+    
+    # 查询用户池
+    response = client.list_users(
+        UserPoolId=user_pool_id,
+        Filter=filter_expression,
+        Limit=1
+    )
+    
+    # 检查是否找到用户
+    user_exists = len(response['Users']) > 0
+
+    resetPublicKey = False
+    resetPublicKeyTimes = 0
+
+    print(response)
+
+    if user_exists:
+        resetPublicKey = True
+        for user in response['Users']:
+            print("Username:", user['Username'])
+            for attribute in user['Attributes']:
+                if attribute['Name'] == "custom:public_key1":
+                    if len(attribute['Value']) > 0:
+                        resetPublicKey = False
+                if attribute['Name'] == "custom:reset_pubkey_times":
+                    resetPublicKeyTimes = attribute['Value']
+
+                    if counter:
+
+                        try:
+                            response = client.admin_update_user_attributes(
+                                UserPoolId=user_pool_id,
+                                Username=username,
+                                UserAttributes=[
+                                    {
+                                        'Name': 'custom:reset_pubkey_times',
+                                        'Value': str(int(resetPublicKeyTimes) + 1)
+                                    }
+                                ]
+                            )
+                            print("User attributes updated successfully.")
+                        except client.exceptions.UserNotFoundException:
+                            print("User not found.")
+                        except Exception as e:
+                            print(e)
+
+    return resetPublicKey
