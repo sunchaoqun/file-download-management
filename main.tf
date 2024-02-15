@@ -120,6 +120,15 @@ resource "aws_s3_object" "index_html" {
   acl          = "private"
 }
 
+resource "aws_s3_object" "generate_html" {
+  depends_on   = [null_resource.modify_generate_html]
+  bucket       = aws_s3_bucket.file_download_bucket.bucket
+  key          = "generate.html"
+  source       = "${path.module}/generate.html"
+  content_type = "text/html" # 设置 Content-Type
+  acl          = "private"
+}
+
 resource "aws_s3_object" "register_html" {
   depends_on   = [null_resource.modify_register_html]
   bucket       = aws_s3_bucket.file_download_bucket.bucket
