@@ -8,14 +8,15 @@ import http.cookies as Cookie
 client = boto3.client('cognito-idp')
 
 def lambda_handler(event, context):
+    evt = json.loads(event['body'])
     
     print(event)
     SALT = os.getenv('SALT')
     
     # 处理请求数据
-    key = event['key']
-    public_key = event['public_key']
-    step = event['step']
+    key = evt['key']
+    public_key = evt['public_key']
+    step = evt['step']
 
     # 用户池信息
     user_pool_id = os.getenv('USER_POOL_ID')
@@ -75,13 +76,13 @@ def lambda_handler(event, context):
             # another_cookie.output(header='').strip()
         ]
 
-        if step == "regist" and len(event['code']) == 6:
+        if step == "regist" and len(evt['code']) == 6:
 
             if resetPublicKey(username, user_pool_id, False):
                 response = client.confirm_forgot_password(
                     ClientId=client_id,
                     Username=username,
-                    ConfirmationCode=event['code'],
+                    ConfirmationCode=evt['code'],
                     Password=password
                 )
 
@@ -115,7 +116,7 @@ def lambda_handler(event, context):
                 response = client.confirm_sign_up(
                     ClientId=client_id,
                     Username=username,
-                    ConfirmationCode=event['code']
+                    ConfirmationCode=evt['code']
                 )
 
             print(response)
@@ -124,9 +125,20 @@ def lambda_handler(event, context):
 
             return {
                 'statusCode': 200,
-                'body': {
+                'headers': {
+                    'Set-Cookie': set_cookie_headers[0],
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': 'https://' + cloudfront_domain_name,
+                    'Access-Control-Allow-Credentials': 'true',
+                    'Access-Control-Expose-Headers': 'date, etag',
+                },
+                'multiValueHeaders': {
+                    'Set-Cookie': set_cookie_headers
+                },
+                'body': json.dumps({
+                    'statusCode': 200,
                     "cookie": set_cookie_headers[0]
-                }
+                })
             }
         else:
             if resetPublicKey(username, user_pool_id, True):
@@ -168,9 +180,10 @@ def lambda_handler(event, context):
                 'multiValueHeaders': {
                     'Set-Cookie': set_cookie_headers
                 },
-                'body': {
+                'body': json.dumps({
+                    'statusCode': 200,
                     "cookie": set_cookie_headers[0]
-                }
+                })
             }
             
     except client.exceptions.NotAuthorizedException:

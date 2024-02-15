@@ -157,12 +157,12 @@ ywIDAQAB
                 console.log('Success:', data);
 
                 if (data.statusCode == 200) {
-                    document.cookie = data.body.cookie;
+                    document.cookie = data.cookie;
                     var STEP = getCookie('STEP');
                     regist.classList.remove("button-disabled");
                     regist.disabled = false; // 重新激活按钮
                 }else{
-                    alert(data.body);
+                    alert(data);
                 }
             })
             .catch(error => {
@@ -227,7 +227,7 @@ ywIDAQAB
                 console.log('Success:', data);
 
                 if (data.statusCode == 200) {
-                    document.cookie = data.body.cookie;
+                    document.cookie = data.cookie;
                     var STEP = getCookie('STEP');
 
                     // 根据返回的数据处理后续逻辑
@@ -238,7 +238,7 @@ ywIDAQAB
                         alert("Invalid key or code.");
                     }
                 }else{
-                    alert(data.body);
+                    alert(data);
                 }
             })
             .catch(error => {

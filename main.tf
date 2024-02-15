@@ -563,7 +563,7 @@ resource "aws_api_gateway_integration" "public_key_signup_lambda" {
   rest_api_id             = aws_api_gateway_rest_api.s3_download_management_api.id
   resource_id             = aws_api_gateway_resource.public_key_signup.id
   http_method             = aws_api_gateway_method.public_key_signup_post.http_method
-  type                    = "AWS"
+  type                    = "AWS_PROXY"
   uri                     = aws_lambda_function.public_key_registration_api_signup_lambda.invoke_arn
   integration_http_method = aws_api_gateway_method.public_key_signup_post.http_method
 }
