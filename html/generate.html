@@ -64,10 +64,11 @@
         }
     </style>
 </head>
+
 <body>
     <form id="dataForm">
         <div class="label">Key:</div>
-        <input type="text" name="key" id="key" placeholder="Key" value="+6583079697" required><br>
+        <input type="text" name="key" id="key" placeholder="Key" value="" required><br>
         <div class="label">Max Login Times:</div>
         <input type="number" name="max_login_times" id="max_login_times" placeholder="Max Login Times" value="1" required><br>
         <div class="label">Max Download Count:</div>
@@ -78,11 +79,11 @@
 
         <div id="use_s3_div">
             <div class="label">Region:</div>
-            <input type="text" name="region" id="region" placeholder="S3 Region" value="ap-southeast-1" required><br>
+            <input type="text" name="region" id="region" placeholder="S3 Region" value="" required><br>
             <div class="label">S3 Bucket:</div>
-            <input type="text" name="s3_bucket" id="s3_bucket" placeholder="S3 Bucket" value="billysun-sg" required><br>
+            <input type="text" name="s3_bucket" id="s3_bucket" placeholder="S3 Bucket" value="" required><br>
             <div class="label">S3 Key:</div>
-            <input type="text" name="s3_key" id="s3_key" placeholder="S3 Key" value="aws.jpg" required><br>
+            <input type="text" name="s3_key" id="s3_key" placeholder="S3 Key" value="" required><br>
             <div class="label">Generated URI:</div>
             <input type="text" name="generated_uri" id="generated_uri" placeholder="Generated URI" value=""><br>
         </div>
@@ -91,7 +92,7 @@
         <input type="checkbox" name="encrypt" id="encrypt"> Encrypt<br>
         <div id="encryptKeyDiv" class="hidden">
             <div class="label">Encrypt Key:</div>
-            <input type="text" name="encrypt_key" id="encrypt_key" placeholder="Encrypt Key" value="billysun@amazon.com">
+            <input type="text" name="encrypt_key" id="encrypt_key" placeholder="Encrypt Key" value="">
         </div>
         <div id="fileDiv" class="hidden">
             <input type="file" name="fileToUpload" id="fileToUpload"><br>
@@ -108,7 +109,6 @@
     <div id="result" class="result"></div>
 
     <script>
-
         let uploadedChunks = 0;
         const chunkSize = 1000 * 1024;
         const parallelUploadCount = 2;
@@ -122,12 +122,22 @@
         });
 
         document.getElementById('use_s3').addEventListener('change', function() {
+            var regionInput = document.getElementById('region');
+            var s3BucketInput = document.getElementById('s3_bucket');
+            var s3KeyInput = document.getElementById('s3_key');
             if (this.checked) {
                 document.getElementById('use_s3_div').classList.remove('hidden');
                 document.getElementById('fileDiv').classList.add('hidden');
+                regionInput.required = true;
+                s3BucketInput.required = true;
+                s3KeyInput.required = true;
+
             } else {
                 document.getElementById('use_s3_div').classList.add('hidden');
                 document.getElementById('fileDiv').classList.remove('hidden');
+                regionInput.required = false;
+                s3BucketInput.required = false;
+                s3KeyInput.required = false;
             }
         });
 

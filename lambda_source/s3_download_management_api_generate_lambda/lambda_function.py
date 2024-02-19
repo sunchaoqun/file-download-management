@@ -59,8 +59,8 @@ cloudfront_domain_name = os.getenv('CLOUDFRONT_DOMAIN_NAME')
 
 # 创建目标 S3 客户端（指定区域）
 s3_destination = boto3.client('s3', region_name=destination_region)
-allow_origin = 'null'
-# allow_origin = 'https://' + cloudfront_domain_name
+# allow_origin = 'null'
+allow_origin = 'https://' + cloudfront_domain_name
 
 def lambda_handler(event, context):
     

@@ -5,6 +5,10 @@ variable "cognito_user_pool_name" {}
 variable "cognito_user_pool_registration_name" {}
 variable "generate_alb_vpc_id" {}
 variable "generate_alb_subnet_ids" {}
+variable "generate_alb_certificate_arn" {}
+variable "generate_alb_bound_domain" {}
+
+
 
 
 provider "aws" {
@@ -124,18 +128,42 @@ resource "aws_s3_object" "generate_html" {
   depends_on   = [null_resource.modify_generate_html]
   bucket       = aws_s3_bucket.file_download_bucket.bucket
   key          = "generate.html"
-  source       = "${path.module}/generate.html"
+  content      = file("${path.module}/generate.html")
   content_type = "text/html" # 设置 Content-Type
   acl          = "private"
+}
+
+resource "null_resource" "invalidate_cloudfront_generate_html" {
+  depends_on = [aws_s3_object.generate_html]
+
+  triggers = {
+    generate_html_etag = aws_s3_object.generate_html.etag
+  }
+
+  provisioner "local-exec" {
+    command = "aws cloudfront create-invalidation --distribution-id ${aws_cloudfront_distribution.s3_distribution.id} --region ${var.region} --paths '/generate.html'"
+  }
 }
 
 resource "aws_s3_object" "register_html" {
   depends_on   = [null_resource.modify_register_html]
   bucket       = aws_s3_bucket.file_download_bucket.bucket
   key          = "register.html"
-  source       = "${path.module}/register.html"
+  content      = file("${path.module}/register.html")
   content_type = "text/html" # 设置 Content-Type
   acl          = "private"
+}
+
+resource "null_resource" "invalidate_cloudfront_register_html" {
+  depends_on = [aws_s3_object.register_html]
+
+  triggers = {
+    register_html_etag = aws_s3_object.register_html.etag
+  }
+
+  provisioner "local-exec" {
+    command = "aws cloudfront create-invalidation --distribution-id ${aws_cloudfront_distribution.s3_distribution.id} --region ${var.region} --paths '/register.html'"
+  }
 }
 
 # 创建 CloudFront 分发
@@ -891,7 +919,7 @@ resource "aws_lambda_permission" "cognito_invoke_lambda_pre_auth" {
 
 resource "null_resource" "modify_generate_html" {
   provisioner "local-exec" {
-    command = "bash modify_generate.sh ${aws_api_gateway_deployment.s3_download_management_api_deployment.invoke_url} http://${aws_lb.generate_alb.dns_name}"
+    command = "bash modify_generate.sh ${aws_api_gateway_deployment.s3_download_management_api_deployment.invoke_url} https://${var.generate_alb_bound_domain}"
   }
 
   # 触发器可以是任何会在您需要重新执行脚本时发生变化的值
@@ -1335,18 +1363,18 @@ resource "aws_lb_listener" "http" {
   }
 }
 
-# resource "aws_lb_listener" "https" {
-#   load_balancer_arn = aws_lb.generate_alb.arn
-#   port              = 443
-#   protocol          = "HTTPS"
-#   ssl_policy        = "ELBSecurityPolicy-2016-08"
-#   certificate_arn   = "your_certificate_arn" # 替换为你的SSL证书ARN
+resource "aws_lb_listener" "https" {
+  load_balancer_arn = aws_lb.generate_alb.arn
+  port              = 443
+  protocol          = "HTTPS"
+  ssl_policy        = "ELBSecurityPolicy-2016-08"
+  certificate_arn   = var.generate_alb_certificate_arn
 
-#   default_action {
-#     type             = "forward"
-#     target_group_arn = aws_lb_target_group.generate_alb_tg.arn
-#   }
-# }
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.generate_alb_tg.arn
+  }
+}
 
 output "lambda_function_version_arn" {
   value = "${aws_lambda_function.s3_download_checker.arn}:${aws_lambda_function.s3_download_checker.version}"

@@ -5,3 +5,5 @@ cognito_user_pool_name                  = "file_download_management_pool"
 cognito_user_pool_registration_name     = "public_key_registration_pool"
 generate_alb_vpc_id                     = "vpc-0f1baf18152b0ff0c"
 generate_alb_subnet_ids                 = ["subnet-0df6b76f43fc06500","subnet-0a02b754f1d1b30cf"]
+generate_alb_certificate_arn            = "arn:aws:acm:ap-southeast-1:932423224465:certificate/ac61f714-00f4-4ebb-b4fb-54a7930bbe71"
+generate_alb_bound_domain               = "alb.chaoqun.us"
