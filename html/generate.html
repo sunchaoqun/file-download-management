@@ -110,8 +110,23 @@
 
     <script>
         let uploadedChunks = 0;
-        const chunkSize = 1000 * 1024;
+        const unit = 1024*1024;
+        const chunkSize = unit * 5; //5M
         const parallelUploadCount = 2;
+
+        var randomSixDigits = 0;
+
+        function generateRandomSixDigits() {
+            return Math.floor(100000 + Math.random() * 900000);
+        }
+        
+        function showProgress(uploadedChunks, totalChunks, uploadedSize, totalSize){
+            var progressBar = document.getElementById('progressBar');
+            let percent = (uploadedChunks / totalChunks) * 100;
+            progressBar.style.width = percent + '%';
+            let progressPercent = (uploadedSize / totalSize) * 100;
+            progressInfo.textContent = `已上传: ${(uploadedSize/unit).toFixed(2)}MB / 总共: ${(totalSize/unit).toFixed(2)}MB (${progressPercent.toFixed(2)}%)`;
+        }
 
         document.getElementById('compress').addEventListener('change', function() {
             document.getElementById('encrypt').disabled = !this.checked;
@@ -152,7 +167,7 @@
          async function uploadChunk(chunk, filename, chunkIndex, totalChunks, totalSize) {
             const formData = new FormData();
 
-            formData.append('fileChunk', chunk);
+            // formData.append('fileChunk', chunk);
             formData.append('filename', filename);
             formData.append('chunkIndex', chunkIndex);
             formData.append('totalChunks', totalChunks);
@@ -168,6 +183,7 @@
             formData.append('compress', document.getElementById('compress').checked);
             formData.append('encrypt', document.getElementById('encrypt').checked);
             formData.append('encrypt_key', document.getElementById('encrypt_key').value);
+            formData.append('rdm_code', randomSixDigits);
             
             // if (!document.getElementById('encrypt').checked) {
             //     formData.delete('encrypt_key');
@@ -180,41 +196,74 @@
                 body: formData
             })
             .then(response => {
+                console.log(response)
                 if (!response.ok) {
                     throw new Error('Network response was not ok');
                 }
                 return response.json();
             })
             .then(data => {
-                let uploadedSize = 0;
-                let uploadedSizeMB = 0;
-                let totalSizeMB = totalSize / (1024 * 1024);
+                console.log("s3_presigned_url",data.s3_presigned_url);
+                if(data.s3_presigned_url){
+                    return fetch(data.s3_presigned_url , {
+                        method: 'PUT',
+                        // mode: 'cors',
+                        // credentials: 'include', // 包含 cookies
+                        body: chunk
+                    })
+                    .then(response => {
+                        console.log(response)
+                        if (!response.ok) {
+                            throw new Error('Network response was not ok');
+                        }
+                    })
+                    .then(data => {
+                        let uploadedSize = 0;
+                        let uploadedSizeMB = 0;
+                        let totalSizeMB = totalSize / (1024 * 1024);
 
-                uploadedChunks++;
+                        uploadedChunks++;
 
-                console.log("uploadedChunks "+ uploadedChunks + " totalChunks " + totalChunks);
+                        console.log("uploadedChunks "+ uploadedChunks + " totalChunks " + totalChunks);
 
-                if(uploadedChunks == totalChunks) {
-                    document.getElementById('result').innerText = JSON.stringify(data, null, 2);
-                    generateButton.disabled = false; // 禁用按钮
-                    generateButton.classList.remove('button-disabled');
-                    uploadedSize = totalSize;
-                    uploadedSizeMB = totalSizeMB;
-                } else {
-                    uploadedSize = uploadedChunks * chunkSize;
-                    uploadedSizeMB = uploadedSize / chunkSize;
+                        if(uploadedChunks == totalChunks) {
+                            
+                            return fetch('GENERATE_ALB_URL', { // 替换为您的后端URL
+                                method: 'POST',
+                                mode: 'cors',
+                                credentials: 'include', // 包含 cookies
+                                body: formData
+                            })
+                            .then(response => {
+                                console.log(response)
+                                if (!response.ok) {
+                                    throw new Error('Network response was not ok');
+                                }
+                                return response.json();
+                            }).then(data => {
+                                document.getElementById('result').innerText = JSON.stringify(data, null, 2);
+                                generateButton.disabled = false; // 禁用按钮
+                                generateButton.classList.remove('button-disabled');
+                                uploadedSize = totalSize;
+
+                                showProgress(uploadedChunks,totalChunks,uploadedSize,totalSize);
+                            })
+                            .catch(error => {
+                                console.error('Error:', error);
+                                document.getElementById('result').innerText = 'Error: ' + error.message;
+                            });
+                        } else {
+                            uploadedSize = uploadedChunks * chunkSize;
+                        }
+
+                        console.log("uploaded "+ uploadedSize + " total " + totalSize);
+                        showProgress(uploadedChunks,totalChunks,uploadedSize,totalSize);
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        document.getElementById('result').innerText = 'Error: ' + error.message;
+                    });
                 }
-
-                console.log("uploaded "+ uploadedSize + " total " + totalSize);
-
-                let percent = (uploadedChunks / totalChunks) * 100;
-
-                progressBar.style.width = percent + '%';
-
-                let progressPercent = (uploadedSize / totalSize) * 100;
-
-                progressInfo.textContent = `已上传: ${uploadedSizeMB.toFixed(2)}MB / 总共: ${totalSizeMB.toFixed(2)}MB (${progressPercent.toFixed(2)}%)`;
-                
             })
             .catch(error => {
                 console.error('Error:', error);
@@ -237,6 +286,8 @@
             progressContainer.classList.remove('hidden'); // 显示进度条
             uploadedChunks = 0;
             progressBar.style.width = '0%'; // 重置进度条
+
+            randomSixDigits = generateRandomSixDigits();
 
             if(use_s3){
 

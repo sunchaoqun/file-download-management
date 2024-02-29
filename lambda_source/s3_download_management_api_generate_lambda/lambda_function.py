@@ -21,6 +21,7 @@ import urllib.parse
 # import email
 # from email.parser import BytesParser
 # from email import policy
+from botocore.config import Config
 from requests_toolbelt.multipart import decoder
 
 # from io import BytesIO
@@ -58,7 +59,7 @@ destination_bucket = os.getenv('DESTINATION_BUCKET')
 cloudfront_domain_name = os.getenv('CLOUDFRONT_DOMAIN_NAME')
 
 # 创建目标 S3 客户端（指定区域）
-s3_destination = boto3.client('s3', region_name=destination_region)
+s3_destination = boto3.client('s3', region_name=destination_region, config=Config(signature_version='s3v4'))
 # allow_origin = 'null'
 allow_origin = 'https://' + cloudfront_domain_name
 
@@ -72,9 +73,11 @@ def lambda_handler(event, context):
     
     FILE_BASE_URL = os.getenv('FILE_BASE_URL')
     
+    TEMP_FILE_RANDOM_PREFIX = ''
+    
     content_type = event['headers'].get('content-type') if event['headers'].get('content-type') else event['headers'].get('Content-Type')
 
-    print(content_type)
+    # print(content_type)
 
     if content_type == None:
         return
@@ -94,12 +97,15 @@ def lambda_handler(event, context):
     encrypt_key = ''
     generated_uri = ''
     compress_code = ''
+    rdm_code = ''
 
     # 解码请求体（如果是base64编码）
     if event.get('isBase64Encoded', False):
         body = base64.b64decode(body)
     else:
         body = body.encode('utf-8')  # 确保body是字节串
+        
+    # print(body)
 
     if "multipart/form-data" in content_type:
         file_chunk = ''
@@ -137,21 +143,27 @@ def lambda_handler(event, context):
                 encrypt_key = part.content.decode('utf-8')
             if b'name="generated_uri"' in content_disposition:
                 generated_uri = part.content.decode('utf-8')
+            if b'name="rdm_code"' in content_disposition:
+                rdm_code = part.content.decode('utf-8')
 
             compress_code = ''
+            
+        TEMP_FILE_RANDOM_PREFIX = key + '_' + rdm_code
 
         # 生成S3中片段的键名
-        chunk_key = f'temp/{filename}_part_{chunk_index}'
+        chunk_key = f'temp/{TEMP_FILE_RANDOM_PREFIX}/{filename}_part_{chunk_index}'
 
         # 将片段保存到S3
-        s3_destination.put_object(Bucket=destination_bucket, Key=chunk_key, Body=file_chunk)
+        # s3_destination.put_object(Bucket=destination_bucket, Key=chunk_key, Body=file_chunk)
+        generate_presigned_url_value = generate_presigned_url(destination_bucket,chunk_key)
+        
 
         # 检查是否所有片段都已上传
-        if all_chunks_uploaded(filename, total_chunks):
+        if all_chunks_uploaded(filename,TEMP_FILE_RANDOM_PREFIX, total_chunks):
             # 组合文件片段
-            combined_key = combine_chunks(filename, total_chunks)
+            combined_key = combine_chunks(filename, TEMP_FILE_RANDOM_PREFIX, total_chunks)
             # 清理临时片段
-            clean_up_chunks(filename, total_chunks)
+            clean_up_chunks(filename, TEMP_FILE_RANDOM_PREFIX, total_chunks)
 
             region = destination_region
             s3_bucket = destination_bucket
@@ -166,12 +178,12 @@ def lambda_handler(event, context):
                     'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token',
                     'Access-Control-Allow-Credentials': 'true'
                 },
-                'body': json.dumps({'msg': chunk_index })
+                'body': json.dumps({'msg': chunk_index, 's3_presigned_url': generate_presigned_url_value })
             }
     else :
         # 解析JSON字符串为字典
         body = json.loads(body)
-        print(body)
+        # print(body)
 
         key = body['key']
         max_download_count = body['max_download_count']
@@ -199,7 +211,7 @@ def lambda_handler(event, context):
         
     generated_uri = BASE_PATH + "/" + key + "/" + generated_uri
         
-    print(generated_uri)
+    print('generated_uri ' + generated_uri)
 
     
     # 创建源 S3 客户端
@@ -411,7 +423,7 @@ def lambda_handler(event, context):
             UserAttributes=user_attributes
         )
         
-        print(response)
+        # print(response)
         
         resp = {
             "key" :key,
@@ -559,9 +571,9 @@ def validateEmail(email):
 #         encrypted = cipher.encrypt(data)
 #         return encrypted
 
-def all_chunks_uploaded(filename, total_chunks):
+def all_chunks_uploaded(filename, TEMP_FILE_RANDOM_PREFIX, total_chunks):
     # 构建期望的所有片段的S3键列表
-    expected_keys = [f'temp/{filename}_part_{i}' for i in range(total_chunks)]
+    expected_keys = [f'temp/{TEMP_FILE_RANDOM_PREFIX}/{filename}_part_{i}' for i in range(total_chunks)]
 
     # 检查这些键是否都存在于S3桶中
     for key in expected_keys:
@@ -572,11 +584,11 @@ def all_chunks_uploaded(filename, total_chunks):
             return False
     return True
 
-def combine_chunks(filename, total_chunks):
+def combine_chunks(filename, TEMP_FILE_RANDOM_PREFIX, total_chunks):
     # 组合文件的内容
     combined_file_content = bytearray()
     for i in range(total_chunks):
-        chunk_key = f'temp/{filename}_part_{i}'
+        chunk_key = f'temp/{TEMP_FILE_RANDOM_PREFIX}/{filename}_part_{i}'
         chunk = s3_destination.get_object(Bucket=destination_bucket, Key=chunk_key)['Body'].read()
         combined_file_content.extend(chunk)
 
@@ -585,8 +597,14 @@ def combine_chunks(filename, total_chunks):
     s3_destination.put_object(Bucket=destination_bucket, Key=combined_key, Body=combined_file_content)
     return combined_key
 
-def clean_up_chunks(filename, total_chunks):
+def clean_up_chunks(filename, TEMP_FILE_RANDOM_PREFIX, total_chunks):
     # 删除所有临时片段文件
     for i in range(total_chunks):
-        chunk_key = f'temp/{filename}_part_{i}'
+        chunk_key = f'temp/{TEMP_FILE_RANDOM_PREFIX}/{filename}_part_{i}'
         # s3_destination.delete_object(Bucket=destination_bucket, Key=chunk_key)
+
+def generate_presigned_url(bucket_name, object_name, expiration=3600):
+    
+    return s3_destination.generate_presigned_url('put_object',
+                                            Params={'Bucket': bucket_name, 'Key': object_name},
+                                            ExpiresIn=expiration)
